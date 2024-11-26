@@ -1,0 +1,374 @@
+import { NauthConfiguration, NauthManager, UserDO, IUser } from '.';
+import { IDBAdapter } from '../db';
+import { tokenMake } from '../util';
+import { NotLoginException } from '../exception';
+
+/**
+ * 鉴权框架的核心逻辑
+ *
+ * @author JanYork
+ * @email <747945307@qq.com>
+ * @date 2024/11/25 17:24
+ */
+export class VerifierLogic {
+  /**
+   * 认证类型
+   */
+  private readonly TYPE: string;
+
+  /**
+   * 持久层适配器
+   */
+  private db: IDBAdapter = NauthManager.dbAdapter;
+
+  /**
+   * 系统配置
+   */
+  private config: NauthConfiguration = NauthManager.configuration;
+
+  /**
+   * 构造函数
+   *
+   * @param type 认证类型
+   */
+  constructor(type: string) {
+    this.TYPE = type;
+
+    // 自身检查
+    this.check();
+
+    // 设置核心逻辑处理器到管理器
+    NauthManager.setLogic(type, this);
+  }
+
+  /**
+   * 设置配置
+   *
+   * @param config 配置
+   */
+  public setConfiguration(config: NauthConfiguration) {
+    this.config = config;
+  }
+
+  public setDBAdapter(db: IDBAdapter) {
+    this.db = db;
+  }
+
+  /**
+   * 检查配置
+   */
+  public check() {
+    if (!this.config) {
+      throw new Error('The configuration is not set');
+    }
+
+    if (!this.db) {
+      throw new Error('The database adapter is not set');
+    }
+  }
+
+  /**
+   * 登录
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async login(id: string | number | bigint): Promise<string> {
+    const key = `${this.TYPE.toUpperCase()}_LOGIN:${id}`;
+    const token = tokenMake(this.config!.tokenStyle);
+    const expire = Date.now() + this.config!.tokenTimeout * 1000;
+    const user = new UserDO(key, this.TYPE, token, expire);
+    await this.db!.save(user);
+    return token;
+  }
+
+  /**
+   * 注销
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async logout(id: string | number | bigint) {
+    const key = `${this.TYPE.toUpperCase()}_LOGIN:${id}`;
+    await this.db!.delete(key);
+  }
+
+  /**
+   * 踢出
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async kickout(id: string | number | bigint) {
+    const key = `${this.TYPE.toUpperCase()}_LOGIN:${id}`;
+    const user: Partial<IUser> & Pick<IUser, 'id'> = {
+      id: key,
+      kicked: true,
+    };
+    await this.db!.update(user);
+  }
+
+  /**
+   * 封禁
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   * @param duration 封禁时长(s)
+   */
+  public disable(id: string | number | bigint, duration: number = -1) {
+    const key = `${this.TYPE.toUpperCase()}_LOGIN:${id}`;
+
+    // 转换为毫秒
+    if (duration !== -1 && duration !== 0) {
+      duration *= 1000 + Date.now();
+    }
+
+    const user: Partial<IUser> & Pick<IUser, 'id'> = {
+      id: key,
+      disabled: true,
+      duration,
+    };
+    return this.db!.update(user);
+  }
+
+  /**
+   * 解封
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public enable(id: string | number | bigint) {
+    const key = `${this.TYPE.toUpperCase()}_LOGIN:${id}`;
+    const user: Partial<IUser> & Pick<IUser, 'id'> = {
+      id: key,
+      disabled: false,
+      duration: 0,
+    };
+    return this.db!.update(user);
+  }
+
+  /**
+   * 是否登录
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async isLogin(id: string | number | bigint): Promise<boolean> {
+    try {
+      await this.checkLogin(id);
+      return true;
+    } catch (e) {
+      if (e instanceof NotLoginException) {
+        return false;
+      }
+
+      throw e;
+    }
+  }
+
+  /**
+   * 检查登录
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async checkLogin(id: string | number | bigint) {
+    const hasKey = await this.db!.exists(
+      `${this.TYPE.toUpperCase()}_LOGIN:${id}`
+    );
+    if (!hasKey) {
+      throw new NotLoginException('The user is not logged in');
+    }
+
+    const user = await this.db!.find(`${this.TYPE.toUpperCase()}_LOGIN:${id}`);
+    if (user === null) {
+      throw new NotLoginException('The user is not logged in');
+    }
+
+    // 已被踢出
+    if (user.kicked) {
+      await this.cleanLogin(id);
+      throw new NotLoginException('The user is kicked out');
+    }
+
+    // 是否已经过期
+    if (user.expireTime! < Date.now() && !user.permanent) {
+      await this.cleanLogin(id);
+      throw new NotLoginException('The user is expired');
+    }
+
+    // 是否需要续期
+    if (this.needRenew(user)) {
+      await this.renew(id);
+    }
+  }
+
+  /**
+   * 清理登录缓存
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async cleanLogin(id: string | number | bigint) {
+    await this.db!.delete(`${this.TYPE.toUpperCase()}_LOGIN:${id}`);
+  }
+
+  /**
+   * 是否需要续期
+   *
+   * @param user 用户信息
+   */
+  public needRenew(user: IUser) {
+    return (
+      user.expireTime! - Date.now() < this.config!.tokenRenewCondition * 1000
+    );
+  }
+
+  /**
+   * 续期
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async renew(id: string | number | bigint) {
+    const user = await this.db!.find(`${this.TYPE.toUpperCase()}_LOGIN:${id}`);
+    if (user === null) {
+      throw new NotLoginException('The user is not logged in');
+    }
+
+    user.renewCount += 1;
+    user.expireTime = user.expireTime! + this.config!.tokenRenew * 1000;
+
+    await this.db!.update(user);
+  }
+
+  /**
+   * 检查封禁
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async checkDisable(id: string | number | bigint) {
+    await this.checkLogin(id);
+
+    const user = await this.db!.find(`${this.TYPE.toUpperCase()}_LOGIN:${id}`);
+    if (user!.disabled) {
+      // 永久封禁
+      if (user!.duration === -1) {
+        throw new NotLoginException('The user is permanently disabled');
+      }
+
+      // 封禁时间已过
+      if (!(user!.duration > Date.now()) || user!.duration === 0) {
+        // 解除封禁
+        await this.enable(id);
+        return;
+      }
+
+      // 封禁时间未过
+      throw new NotLoginException('The user is disabled now');
+    }
+  }
+
+  // todo：updateTime
+
+  /**
+   * 获取用户token
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async tokenValue(
+    id: string | number | bigint
+  ): Promise<string | undefined | null> {
+    return await this.db!.field(
+      `${this.TYPE.toUpperCase()}_LOGIN:${id}`,
+      'token'
+    );
+  }
+
+  /**
+   * 使用Token获取用户ID
+   *
+   * @param token 用户Token
+   */
+  public async loginID(token: string): Promise<string | null> {
+    const key = await this.db!.key(token);
+    if (key === null) {
+      return null;
+    }
+
+    // Key -> Prefix:${this.TYPE.toUpperCase()}_LOGIN:${id}
+    return key.split(':')[2];
+  }
+
+  /**
+   * 获取用户超时时间
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async timeout(id: string | number | bigint): Promise<number | null> {
+    const value = await this.db!.field(
+      `${this.TYPE.toUpperCase()}_LOGIN:${id}`,
+      'expireTime'
+    );
+    if (value === null) {
+      return null;
+    }
+
+    return Number(value);
+  }
+
+  /**
+   * 获取用户剩余时间(s)
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async remain(id: string | number | bigint): Promise<number | null> {
+    const value = await this.timeout(id);
+    if (value === null) {
+      return null;
+    }
+
+    return Math.floor((value - Date.now()) / 1000);
+  }
+
+  /**
+   * 获取用户信息
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async info(id: string | number | bigint): Promise<UserDO | null> {
+    return await this.db!.find(`${this.TYPE.toUpperCase()}_LOGIN:${id}`);
+  }
+
+  /**
+   * 获取用户信息上下文
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async ctx<T = Record<string, string>>(
+    id: string | number | bigint
+  ): Promise<T> {
+    return (await this.db!.ctx(`${this.TYPE.toUpperCase()}_LOGIN:${id}`)) as T;
+  }
+
+  /**
+   * 设置用户信息上下文
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   * @param key 键
+   * @param value 值
+   */
+  public async set(id: string | number | bigint, key: string, value: string) {
+    await this.db!.set(`${this.TYPE.toUpperCase()}_LOGIN:${id}`, key, value);
+  }
+
+  /**
+   * 清空用户信息上下文
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  public async clear(id: string | number | bigint) {
+    await this.db!.clear(`${this.TYPE.toUpperCase()}_LOGIN:${id}`);
+  }
+
+  /**
+   * 删除用户信息上下文中某值
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   * @param key 键
+   */
+  public async del(id: string | number | bigint, key: string) {
+    await this.db!.del(`${this.TYPE.toUpperCase()}_LOGIN:${id}`, key);
+  }
+}
