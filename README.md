@@ -7,18 +7,18 @@ NAUTH is a Node.js authentication and permission management framework. It is des
 ### Quick to use
 
 ```shell
-npm install nauth
+npm install @i-xor/nauth
 
-pnpm install nauth
+pnpm install @i-xor/nauth
 
-yarn add nauth
+yarn add @i-xor/nauth
 ```
 
 ```ts
 import { NauthManager } from './manager';
 
 NauthManager.setConfiguration(null!);
-NauthManager.setDB(mockDbAdapter);
+NauthManager.setDB(dbAdapter);
 
 // Check nauth whether it's ready.
 NauthManager.check()

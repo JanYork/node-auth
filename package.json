@@ -1,16 +1,27 @@
 {
-  "name": "node-auth",
-  "version": "1.0.0",
+  "name": "@i-xor/nauth",
+  "version": "1.0.1",
   "author": "JanYork",
   "license": "Apache-2.0",
-  "email": "hi.ixor.me",
-
+  "email": "hi@ixor.me",
+  "repository": "https://github.com/JanYork/node-auth",
+  "keywords": [
+    "auth",
+    "permission",
+    "nodejs",
+    "typescript"
+  ],
+  "homepage": "paper.nbyte.me",
   "description": "NodeJS's permission management framework.",
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",
     "dev": "ts-node-dev src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write src/**/*.ts",
+    "publish": "npm publish --access public"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
