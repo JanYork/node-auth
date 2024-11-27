@@ -6,7 +6,7 @@ import { Redis } from 'ioredis';
 // @ts-expect-error
 import RedisMock from 'ioredis-mock';
 import { NotLoginException } from '../exception';
-import { RedisDBAdapter } from '../db/redis-db.adapter';
+import { RedisDBAdapter } from '../db';
 
 describe('VerifierLogic', () => {
   let db: IDBAdapter;
@@ -193,4 +193,108 @@ describe('VerifierLogic', () => {
       await expect(logic.checkLogin(userId)).resolves.not.toThrow();
     });
   });
+
+  // 上下文
+  describe('context', () => {
+    // 测试设置上下文
+    it('should set the context', async () => {
+      const userId = 'user1';
+      await logic.login(userId);
+      const info = await logic.info(userId);
+      expect(info).not.toBeNull();
+
+      const ctx = await logic.ctx(userId)
+      expect(ctx).not.toBeNull();
+      expect(Object.keys(ctx!).length).toBe(0);
+
+      await logic.set(userId, 'test', 'test');
+      await logic.set(userId, 'test2', 'test2');
+      const ctx2 = await logic.ctx(userId)
+      expect(ctx2).not.toBeNull();
+      expect(ctx2!.test).toBe('test');
+
+      await logic.del(userId, 'test');
+      const ctx3 = await logic.ctx(userId)
+      expect(ctx3).not.toBeNull();
+      expect(ctx3!.test).toBeUndefined();
+
+      await logic.clear(userId);
+      const ctx4 = await logic.ctx(userId)
+      expect(ctx4).not.toBeNull();
+      expect(ctx4!.test2).toBeUndefined();
+      expect(Object.keys(ctx4!).length).toBe(0);
+    });
+  });
+
+  // 其他
+  describe('other', () => {
+    // 测试使用ID获取用户Token
+    it('should call tokenValue method with correct id', async () => {
+      const userId = 'user1';
+      const token = await logic.login(userId);
+      const result = await logic.tokenValue(userId);
+      expect(result).toBe(token);
+    });
+
+    // 测试使用Token获取用户ID
+    it('should call loginID method with correct token', async () => {
+      const userId = 'user1';
+      const token = await logic.login(userId);
+      const result = await logic.loginID(token);
+      expect(result).toBe(userId);
+    });
+
+    // 测试使用ID获取用户信息
+    it('should call info method with correct id', async () => {
+      const userId = 'user1';
+      await logic.login(userId);
+      const result = await logic.info(userId);
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe(`TEST_LOGIN:${userId}`);
+    });
+
+    // 测试清理登录
+    it('should call cleanLogin method with correct id', async () => {
+      const userId = 'user1';
+      await logic.login(userId);
+      await logic.cleanLogin(userId);
+      await expect(logic.checkLogin(userId)).rejects.toThrowError(
+        NotLoginException
+      );
+    });
+
+    // 测试续期
+    it('should renew the user', async () => {
+      const userId = 'user1';
+      await logic.login(userId);
+      const info = await logic.info(userId);
+      info!.expireTime = Date.now() - 1000;
+      await logic.renew(userId);
+      const info2 = await logic.info(userId);
+      expect(info2!.expireTime).toBeGreaterThan(Date.now());
+      expect(info2!.renewCount).toBe(info!.renewCount + 1);
+    });
+
+    // 测试获取超时时间
+    it('should return the timeout value', async () => {
+      const date = Date.now() + config.tokenTimeout * 1000;
+      const userId = 'user1';
+      await logic.login(userId);
+      const info = await logic.info(userId);
+      const result = await logic.timeout(userId);
+      expect(result).toBeGreaterThanOrEqual(date);
+      expect(result).toBe(info!.expireTime);
+    });
+
+    // 测试获取剩余过期时间
+    it('should return the remaining expiration time', async () => {
+      const userId = 'user-1';
+      await logic.login(userId);
+      const info = await logic.info(userId);
+      const result = await logic.remain(userId);
+      expect(result).toBeGreaterThan(0);
+      const date = info!.expireTime  - Date.now();
+      expect(result).toBe(Math.floor(date / 1000));
+    });
+  })
 });

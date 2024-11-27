@@ -2,6 +2,7 @@ import { NauthConfiguration, NauthManager, UserDO, IUser } from '.';
 import { IDBAdapter } from '../db';
 import { tokenMake } from '../util';
 import { NotLoginException } from '../exception';
+import { isEmpty } from 'radash';
 
 /**
  * 鉴权框架的核心逻辑
@@ -14,7 +15,7 @@ export class VerifierLogic {
   /**
    * 认证类型
    */
-  private readonly TYPE: string;
+  public readonly TYPE: string;
 
   /**
    * 持久层适配器
@@ -260,8 +261,6 @@ export class VerifierLogic {
     }
   }
 
-  // todo：updateTime
-
   /**
    * 获取用户token
    *
@@ -287,7 +286,7 @@ export class VerifierLogic {
       return null;
     }
 
-    // Key -> Prefix:${this.TYPE.toUpperCase()}_LOGIN:${id}
+    // Key -> ${this.TYPE.toUpperCase()}_LOGIN:${id}
     return key.split(':')[2];
   }
 
@@ -301,7 +300,7 @@ export class VerifierLogic {
       `${this.TYPE.toUpperCase()}_LOGIN:${id}`,
       'expireTime'
     );
-    if (value === null) {
+    if (isEmpty(value)) {
       return null;
     }
 
@@ -315,7 +314,7 @@ export class VerifierLogic {
    */
   public async remain(id: string | number | bigint): Promise<number | null> {
     const value = await this.timeout(id);
-    if (value === null) {
+    if (!value) {
       return null;
     }
 
