@@ -16,9 +16,10 @@ yarn add @i-xor/nauth
 
 ```ts
 import { NauthManager } from './manager';
+import { NauthConfiguration } from './configuration';
 
-NauthManager.setConfiguration(null!);
-NauthManager.setDB(dbAdapter);
+NauthManager.setConfiguration(new NauthConfiguration());
+NauthManager.setDB(adapter);
 
 // Check nauth whether it's ready.
 NauthManager.check()
@@ -26,6 +27,19 @@ NauthManager.check()
 
 ```ts
 Verifier.login(uid);
+```
+
+### Test
+
+```shell
+npm run test
+npm run test:coverage
+
+pnpm run test 
+pnpm run test:coverage
+
+yarn test
+yarn test:coverage
 ```
 
 ### Login
