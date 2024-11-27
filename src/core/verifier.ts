@@ -49,6 +49,7 @@ export class Verifier {
    *
    * @param id 用户唯一标识(string | number | bigint)
    * @return Token
+   * @exception {DbStorageException} 删除数据时异常(网络失败)
    */
   static async login(id: string | number | bigint): Promise<string> {
     return this.logic.login(id);
@@ -58,6 +59,7 @@ export class Verifier {
    * 注销
    *
    * @param id 用户唯一标识(string | number | bigint)
+   * @exception {DbStorageException} 删除数据时异常(网络失败/数据不存在等)
    */
   static async logout(id: string | number | bigint) {
     await this.logic.logout(id);
@@ -125,7 +127,7 @@ export class Verifier {
    * @param id 用户唯一标识(string | number | bigint)
    */
   static async tokenValue(
-    id: string | number | bigint
+    id: string | number | bigint,
   ): Promise<string | undefined | null> {
     return this.logic.tokenValue(id);
   }
@@ -154,7 +156,7 @@ export class Verifier {
    * @param id 用户唯一标识(string | number | bigint)
    */
   static async remainingExpirationTime(
-    id: string | number | bigint
+    id: string | number | bigint,
   ): Promise<number | null> {
     return this.logic.remain(id);
   }
