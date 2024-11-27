@@ -103,6 +103,7 @@ export class RedisDBAdapter implements IDBAdapter {
    */
   async update(user: Partial<IUser> & Pick<IUser, 'id'>): Promise<void> {
     const id = user.id;
+    user.updateTime = Date.now();
     const values = Object.entries(user).filter(
       ([key]) => key !== 'id' && key !== 'ctx'
     );
