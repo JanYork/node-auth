@@ -21,7 +21,7 @@ describe('NauthManager', () => {
     } as VerifierLogic;
 
     // 重置 NauthManager 的静态配置和数据库适配器
-    NauthManager.setConfiguration(null!); // 用 null 来模拟未设置配置
+    NauthManager.setConfiguration(new NauthConfiguration());
     NauthManager.setDB(mockDbAdapter);
   });
 
