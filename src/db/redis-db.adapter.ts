@@ -364,7 +364,37 @@ export class RedisDBAdapter implements IDBAdapter {
    */
   async set(id: string, key: string, value: string): Promise<void> {
     await this.autoLock(id, async () => {
-      await this.#_redis.hset(`${this._prefix}:${id}:CTX`, key, value);
+      // 如果用户不存在，抛出异常
+      if (!(await this.exists(id))) {
+        throw new DbStorageException('The user does not exist');
+      }
+      const user = await this.find(id);
+
+      // 如果是长期有效，不设置过期时间
+      const keyExpire = user!.permanent
+        ? null
+        : user!.expireTime! + 24 * 60 * 60 * 1000 - Date.now();
+
+      // 是否已经有上下文
+      const hasCtx = await this.#_redis.exists(`${this._prefix}:${id}:CTX`);
+
+      const multi = this.#_redis.multi();
+      multi.hset(`${this._prefix}:${id}:CTX`, key, value);
+
+      // 如果是第一次设置上下文，并且不是长期有效，设置过期时间
+      if (keyExpire !== null && !hasCtx) {
+        multi.pexpire(`${this._prefix}:${id}:CTX`, keyExpire);
+      }
+
+      const result = await multi.exec();
+      if (result === null) {
+        throw new DbStorageException('The redis transaction was aborted');
+      }
+
+      const err = isRmultiHasErr(result);
+      if (err !== null) {
+        throw new DbStorageException(err);
+      }
     });
   }
 
