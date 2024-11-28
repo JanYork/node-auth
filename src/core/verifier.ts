@@ -94,6 +94,24 @@ export class Verifier {
   }
 
   /**
+   * 设置长期有效
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  static async setLongTermValid(id: string | number | bigint) {
+    await this.logic.permanent(id);
+  }
+
+  /**
+   * 移除长期有效
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  static async removeLongTermValid(id: string | number | bigint) {
+    await this.logic.nonPermanent(id);
+  }
+
+  /**
    * 是否登录，不校验封禁
    *
    * @param id 用户唯一标识(string | number | bigint)
@@ -168,5 +186,53 @@ export class Verifier {
    */
   static async info<T>(id: string | number | bigint): Promise<T | null> {
     return (await this.logic.info(id)) as T;
+  }
+
+  /**
+   * 去除Token前缀
+   *
+   * @param token Token
+   */
+  static tokenNoPrefix(token: string): string | null {
+    return this.logic.tokenNoPrefix(token);
+  }
+
+  /**
+   * 获取上下文
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  static async ctx(id: string | number | bigint) {
+    return this.logic.ctx(id);
+  }
+
+  /**
+   * 设置上下文
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   * @param key Key
+   * @param value Value
+   */
+  static async set(id: string | number | bigint, key: string, value: string) {
+    await this.logic.set(id, key, value);
+  }
+
+  /**
+   * 清空上下文
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   */
+  static async clear(id: string | number | bigint) {
+    await this.logic.clear(id);
+  }
+
+  /**
+   * 删除上下文中某值
+   *
+   * @param id 用户唯一标识(string | number | bigint)
+   * @param key Key
+   */
+  static async del(id: string | number | bigint, key: string) {
+    await this.logic.del(id, key);
   }
 }

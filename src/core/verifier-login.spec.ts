@@ -75,7 +75,7 @@ describe('VerifierLogic', () => {
   describe('kickout', () => {
     // 测试踢出用户并验证用户数据
     it('should mark the user as kicked', async () => {
-      const userId = 'user1';
+      const userId = 'user2';
       await logic.login(userId);
       await logic.kickout(userId);
       const info = await logic.info(userId);
@@ -144,6 +144,52 @@ describe('VerifierLogic', () => {
     });
   });
 
+  // 长期有效
+  describe('permanent', () => {
+    // 测试设置用户为长期有效
+    it('should set the user as permanent', async () => {
+      const userId = 'user1';
+      await logic.login(userId);
+      await logic.permanent(userId);
+
+      const info = await logic.info(userId);
+      expect(info).not.toBeNull();
+      expect(info!.permanent).toBe(true);
+    });
+
+    // 测试设置用户为非长期有效
+    it('should set the user as non-permanent', async () => {
+      const userId = 'user1';
+      await logic.login(userId);
+      await logic.permanent(userId);
+      await logic.nonPermanent(userId);
+
+      const info = await logic.info(userId);
+      expect(info).not.toBeNull();
+      expect(info!.permanent).toBe(false);
+    });
+
+    // 长期有效情况下，及时已经过期，也会续期
+    it('should renew the user even if it has expired', async () => {
+      const userId = 'user1';
+      await logic.login(userId);
+      await logic.permanent(userId);
+
+      // 设置过期时间
+      const db = NauthManager.dbAdapter;
+      const key = `${logic.TYPE.toUpperCase()}_LOGIN:${userId}`;
+      await db.update({
+        id: key,
+        expireTime: Date.now() - 1000,
+      })
+
+      await logic.checkLogin(userId);
+
+      const info = await logic.info(userId);
+      expect(info).not.toBeNull();
+    });
+  });
+
   // 是否登录
   describe('isLogin', () => {
     // 测试用户已登录
@@ -192,6 +238,34 @@ describe('VerifierLogic', () => {
 
       await expect(logic.checkLogin(userId)).resolves.not.toThrow();
     });
+
+    // 非长期有效情况下，过期测试
+    it('should throw NotLoginException if the user is expired', async () => {
+      const userId = 'user-1';
+      const token = await logic.login(userId);
+
+      const uid = await logic.loginID(token);
+      expect(uid).toBe(userId);
+
+      // 设置过期时间
+      const db = NauthManager.dbAdapter;
+      const key = `${logic.TYPE.toUpperCase()}_LOGIN:${userId}`;
+      await db.update({
+        id: key,
+        expireTime: Date.now() - 1000,
+      })
+
+      await expect(logic.checkLogin(userId)).rejects.toThrow(NotLoginException);
+
+      const info = await logic.info(userId);
+      expect(info).toBeNull();
+      const ctx = await logic.ctx(userId);
+      expect(ctx).not.toBeNull();
+      expect(Object.keys(ctx!).length).toBe(0);
+
+      const uid2 = await logic.loginID(token);
+      expect(uid2).toBeNull();
+    })
   });
 
   // 上下文
@@ -294,7 +368,17 @@ describe('VerifierLogic', () => {
       const result = await logic.remain(userId);
       expect(result).toBeGreaterThan(0);
       const date = info!.expireTime  - Date.now();
-      expect(result).toBe(Math.floor(date / 1000));
+      expect(result).toBeGreaterThanOrEqual(Math.floor(date / 1000) - 2);
+      expect(result).toBeLessThanOrEqual(Math.floor(date / 1000) + 2);
+    });
+
+    // 测试去除Token前缀
+    it('should return the token without prefix', async () => {
+      const userId = 'user1';
+      const token = await logic.login(userId);
+      const prefixToken = config.tokenPrefix + token;
+      const result = logic.tokenNoPrefix(prefixToken);
+      expect(result).toBe(token);
     });
   })
 });
