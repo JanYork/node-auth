@@ -181,7 +181,7 @@ describe('VerifierLogic', () => {
       await db.update({
         id: key,
         expireTime: Date.now() - 1000,
-      })
+      });
 
       await logic.checkLogin(userId);
 
@@ -253,7 +253,7 @@ describe('VerifierLogic', () => {
       await db.update({
         id: key,
         expireTime: Date.now() - 1000,
-      })
+      });
 
       await expect(logic.checkLogin(userId)).rejects.toThrow(NotLoginException);
 
@@ -265,7 +265,7 @@ describe('VerifierLogic', () => {
 
       const uid2 = await logic.loginID(token);
       expect(uid2).toBeNull();
-    })
+    });
   });
 
   // 上下文
@@ -277,23 +277,23 @@ describe('VerifierLogic', () => {
       const info = await logic.info(userId);
       expect(info).not.toBeNull();
 
-      const ctx = await logic.ctx(userId)
+      const ctx = await logic.ctx(userId);
       expect(ctx).not.toBeNull();
       expect(Object.keys(ctx!).length).toBe(0);
 
       await logic.set(userId, 'test', 'test');
       await logic.set(userId, 'test2', 'test2');
-      const ctx2 = await logic.ctx(userId)
+      const ctx2 = await logic.ctx(userId);
       expect(ctx2).not.toBeNull();
       expect(ctx2!.test).toBe('test');
 
       await logic.del(userId, 'test');
-      const ctx3 = await logic.ctx(userId)
+      const ctx3 = await logic.ctx(userId);
       expect(ctx3).not.toBeNull();
       expect(ctx3!.test).toBeUndefined();
 
       await logic.clear(userId);
-      const ctx4 = await logic.ctx(userId)
+      const ctx4 = await logic.ctx(userId);
       expect(ctx4).not.toBeNull();
       expect(ctx4!.test2).toBeUndefined();
       expect(Object.keys(ctx4!).length).toBe(0);
@@ -367,7 +367,7 @@ describe('VerifierLogic', () => {
       const info = await logic.info(userId);
       const result = await logic.remain(userId);
       expect(result).toBeGreaterThan(0);
-      const date = info!.expireTime  - Date.now();
+      const date = info!.expireTime - Date.now();
       expect(result).toBeGreaterThanOrEqual(Math.floor(date / 1000) - 2);
       expect(result).toBeLessThanOrEqual(Math.floor(date / 1000) + 2);
     });
@@ -380,5 +380,5 @@ describe('VerifierLogic', () => {
       const result = logic.tokenNoPrefix(prefixToken);
       expect(result).toBe(token);
     });
-  })
+  });
 });

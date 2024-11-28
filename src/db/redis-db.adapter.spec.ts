@@ -55,9 +55,11 @@ describe('RedisDBAdapter', () => {
       redis.set = jest.fn().mockResolvedValue('BUSY');
 
       // Try acquiring the lock, should throw a timeout error
-      await expect(db.acquireLock(id, lockTimeout, acquireTimeout))
-        .rejects
-        .toThrowError('Failed to acquire lock within the timeout period');
+      await expect(
+        db.acquireLock(id, lockTimeout, acquireTimeout)
+      ).rejects.toThrowError(
+        'Failed to acquire lock within the timeout period'
+      );
     });
 
     // 测试当多个请求排队时，以公平的方式获取锁
@@ -91,15 +93,29 @@ describe('RedisDBAdapter', () => {
       });
 
       // 第一个请求应该成功获取锁
-      const releaseLock1 = await db.acquireLock(id, lockTimeout, acquireTimeout);
-      expect(redis.lpush).toHaveBeenCalledWith(`NAUTH:${id}:fair`, expect.any(String));
+      const releaseLock1 = await db.acquireLock(
+        id,
+        lockTimeout,
+        acquireTimeout
+      );
+      expect(redis.lpush).toHaveBeenCalledWith(
+        `NAUTH:${id}:fair`,
+        expect.any(String)
+      );
       expect(redis.lindex).toHaveBeenCalledWith(`NAUTH:${id}:fair`, 0);
 
       // 第二个请求将被加入队列，并且需要等待第一个请求释放锁
-      const releaseLock2Promise = db.acquireLock(id, lockTimeout, acquireTimeout);
+      const releaseLock2Promise = db.acquireLock(
+        id,
+        lockTimeout,
+        acquireTimeout
+      );
 
       // 确保第二个请求等待在队列
-      expect(redis.lpush).toHaveBeenCalledWith(`NAUTH:${id}:fair`, expect.any(String));
+      expect(redis.lpush).toHaveBeenCalledWith(
+        `NAUTH:${id}:fair`,
+        expect.any(String)
+      );
 
       // 模拟第一个请求释放锁
       await releaseLock1();
@@ -119,9 +135,15 @@ describe('RedisDBAdapter', () => {
       const acquireTimeout = 1500;
 
       const releaseLockPromises = await Promise.all([
-        db.acquireLock(id, lockTimeout, acquireTimeout).then(releaseLock => releaseLock()),
-        db.acquireLock(id, lockTimeout, acquireTimeout).then(releaseLock => releaseLock()),
-        db.acquireLock(id, lockTimeout, acquireTimeout).then(releaseLock => releaseLock()),
+        db
+          .acquireLock(id, lockTimeout, acquireTimeout)
+          .then((releaseLock) => releaseLock()),
+        db
+          .acquireLock(id, lockTimeout, acquireTimeout)
+          .then((releaseLock) => releaseLock()),
+        db
+          .acquireLock(id, lockTimeout, acquireTimeout)
+          .then((releaseLock) => releaseLock()),
       ]);
 
       await Promise.all(releaseLockPromises);
@@ -133,7 +155,7 @@ describe('RedisDBAdapter', () => {
       const lockKey = `NAUTH:${id}:lock`;
       const lockValue = await redis.get(lockKey);
       expect(lockValue).toBeNull();
-    })
+    });
   });
 
   // 测试释放锁
@@ -171,10 +193,10 @@ describe('RedisDBAdapter', () => {
         'user1',
         'user',
         'token123',
-        Date.now() - 10000,
+        Date.now() - 10000
       );
       await expect(db.save(invalidUser)).rejects.toThrowError(
-        'The expire time does not less than now',
+        'The expire time does not less than now'
       );
     });
 
@@ -184,7 +206,7 @@ describe('RedisDBAdapter', () => {
         'user2',
         'type2',
         'token456',
-        Date.now() + 24 * 60 * 60 * 1000,
+        Date.now() + 24 * 60 * 60 * 1000
       );
       user.ctx = { key: 'value' };
       await db.save(user);
@@ -242,7 +264,7 @@ describe('RedisDBAdapter', () => {
       // Assert that the expiration time is set
       await expect(redis.pttl(`NAUTH:user1`)).resolves.toBeGreaterThan(-1);
       await expect(redis.pttl(`NAUTH:LOGIN:token123`)).resolves.toBeGreaterThan(
-        -1,
+        -1
       );
 
       const updatedUserData = { id: 'user1', permanent: true };
@@ -261,7 +283,7 @@ describe('RedisDBAdapter', () => {
     it('should throw an error if user does not exist during update', async () => {
       const updatedUserData = { id: 'nonexistent-user', type: 'new-type' };
       await expect(db.update(updatedUserData)).rejects.toThrowError(
-        'The user does not exist',
+        'The user does not exist'
       );
     });
 
@@ -295,7 +317,7 @@ describe('RedisDBAdapter', () => {
     // 测试删除不存在的用户数据抛出错误
     it('should throw error if user does not exist when deleting', async () => {
       await expect(db.delete('nonexistent-user')).rejects.toThrowError(
-        'The redis delete operation failed, the user does not exist or network error',
+        'The redis delete operation failed, the user does not exist or network error'
       );
     });
   });

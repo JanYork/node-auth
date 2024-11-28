@@ -145,7 +145,7 @@ export class Verifier {
    * @param id 用户唯一标识(string | number | bigint)
    */
   static async tokenValue(
-    id: string | number | bigint,
+    id: string | number | bigint
   ): Promise<string | undefined | null> {
     return this.logic.tokenValue(id);
   }
@@ -174,7 +174,7 @@ export class Verifier {
    * @param id 用户唯一标识(string | number | bigint)
    */
   static async remainingExpirationTime(
-    id: string | number | bigint,
+    id: string | number | bigint
   ): Promise<number | null> {
     return this.logic.remain(id);
   }
