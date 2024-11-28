@@ -1,4 +1,4 @@
-import { VerifierLogic } from './verifier-logic';
+import { EVENT_TYPE, VerifierLogic } from './verifier-logic';
 import { NauthConfiguration, NauthManager, UserDO } from '.';
 import { IDBAdapter } from '../db';
 import { Redis } from 'ioredis';
@@ -297,6 +297,69 @@ describe('VerifierLogic', () => {
       expect(ctx4).not.toBeNull();
       expect(ctx4!.test2).toBeUndefined();
       expect(Object.keys(ctx4!).length).toBe(0);
+    });
+  });
+
+  // 订阅事件
+  describe('subscribe', () => {
+    // 测试订阅事件
+    it('should subscribe to the event', async () => {
+      const subscribe = logic.subject;
+      subscribe.subscribe((event) => {
+        switch (event.type) {
+          case EVENT_TYPE.LOGIN:
+            expect(event).not.toBeNull();
+            break;
+          case EVENT_TYPE.LOGOUT:
+            expect(event).not.toBeNull();
+            break;
+          case EVENT_TYPE.EXPIRED:
+            expect(event).not.toBeNull();
+            break;
+          case EVENT_TYPE.KICKOUT:
+            expect(event).not.toBeNull();
+            break;
+          case EVENT_TYPE.KICKOUT_FEEDBACK:
+            expect(event).not.toBeNull();
+            break;
+          case EVENT_TYPE.OFFLINE_ALL:
+            expect(event).not.toBeNull();
+            break;
+        }
+      });
+
+      const db = NauthManager.dbAdapter;
+
+      // 登录
+      const user1 = 'user1';
+      await logic.login(user1);
+
+      // 退出登录
+      const user2 = 'user2';
+      await logic.login(user2);
+      await logic.logout(user2);
+
+      // 过期
+      const user3 = 'user3';
+      await logic.login(user3);
+      const key = `${logic.TYPE.toUpperCase()}_LOGIN:${user3}`;
+      await db.update({
+        id: key,
+        expireTime: Date.now() - 1000,
+      });
+      await expect(logic.checkLogin(user3)).rejects.toThrow(NotLoginException);
+
+      // 踢出
+      const user4 = 'user4';
+      await logic.login(user4);
+      await logic.kickout(user4);
+
+      // 踢出反馈
+      await expect(logic.checkLogin(user4)).rejects.toThrow(NotLoginException);
+
+      // 全部下线
+      await logic.offlineFull();
+      await expect(logic.checkLogin(user1)).rejects.toThrow(NotLoginException);
     });
   });
 
