@@ -38,6 +38,11 @@ export interface IDBAdapter {
   delete(id: string): Promise<void>;
 
   /**
+   * 删除所有认证信息
+   */
+  deleteFull(): Promise<void>;
+
+  /**
    * 是否存在用户的认证信息
    *
    * @param id 用户唯一标识
