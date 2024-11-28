@@ -34,7 +34,7 @@ export class NauthConfiguration {
   /**
    * Token 前缀
    */
-  public readonly tokenPrefix: string = 'Bearer';
+  public readonly tokenPrefix: string = 'Bearer ';
 
   /**
    * Token 续签时长 (单位s)，在过期时间内续签
