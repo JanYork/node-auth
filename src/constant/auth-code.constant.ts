@@ -1,3 +1,10 @@
+/**
+ * 权限错误码
+ *
+ * @author JanYork
+ * @email <747945307@qq.com>
+ * @date 2024/11/27 20:01
+ */
 export enum AUTH_CODE {
   /**
    * 未登录
@@ -15,4 +22,12 @@ export enum AUTH_CODE {
    * 被踢出
    */
   KICKED_OUT = '1004',
+  /**
+   * 封禁
+   */
+  BANNED = '1005',
+  /**
+   * 短时间禁用
+   */
+  SHORT_BAN = '1006',
 }
