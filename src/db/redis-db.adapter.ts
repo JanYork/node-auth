@@ -1,10 +1,12 @@
 import { IDBAdapter } from '.';
 import Redis from 'ioredis';
-import { UserDO, IUser } from '../core';
+import { IUser, UserDO } from '../core';
 import { isEmpty } from 'radash';
 import { DbStorageException } from '../exception';
 import { isRmultiHasErr } from '../util';
 import { v4 as uuid } from 'uuid';
+import { MutexException } from '../exception/mutex.exception';
+import { MUTEX_CODE } from '../constant';
 
 /**
  * Redis 持久化适配器
@@ -24,6 +26,12 @@ export class RedisDBAdapter implements IDBAdapter {
    * Redis key 前缀
    */
   public readonly _prefix = 'NAUTH';
+
+  /**
+   * 删除全局锁
+   * @private
+   */
+  readonly #_fullLock = 'NAUTH:FULL:LOCK';
 
   /**
    * 构造函数
@@ -83,7 +91,10 @@ export class RedisDBAdapter implements IDBAdapter {
 
       // 检查超时，如果已经超过最大等待时间，则返回失败
       if (Date.now() > timeout) {
-        throw new Error('Failed to acquire lock within the timeout period');
+        throw new MutexException(
+          'Failed to acquire lock within the timeout period',
+          MUTEX_CODE.LOCK_TIMEOUT
+        );
       }
 
       // 等待一段时间，防止频繁轮询，减轻资源消耗
@@ -100,11 +111,79 @@ export class RedisDBAdapter implements IDBAdapter {
     const lockKey = `${this._prefix}:${id}:lock`;
     const queueKey = `${this._prefix}:${id}:fair`;
 
+    const multi = this.#_redis.multi();
     // 删除锁
-    await this.#_redis.del(lockKey);
-
+    multi.del(lockKey);
     // 锁释放后，移除队列中的前一个元素
-    await this.#_redis.lpop(queueKey);
+    multi.lpop(queueKey);
+
+    const result = await multi.exec();
+    if (result === null) {
+      throw new MutexException(
+        'The redis transaction was aborted',
+        MUTEX_CODE.UNLOCK_FAILED
+      );
+    }
+
+    const err = isRmultiHasErr(result);
+    if (err !== null) {
+      throw new MutexException(err, MUTEX_CODE.UNLOCK_FAILED);
+    }
+  }
+
+  /**
+   * 检查全局锁
+   */
+  public async checkFullLock() {
+    return (await this.#_redis.exists(this.#_fullLock)) === 1;
+  }
+
+  /**
+   * 全局锁锁定
+   */
+  public async acquireFullLock(
+    lockTimeout: number = 5000,
+    acquireTimeout: number = 1500
+  ) {
+    const lockValue = uuid();
+    const timeout = Date.now() + acquireTimeout;
+
+    while (true) {
+      const result = await this.#_redis.set(
+        this.#_fullLock,
+        lockValue,
+        'PX',
+        lockTimeout,
+        'NX'
+      );
+
+      if (result === 'OK') {
+        return async () => {
+          await this.releaseFullLock();
+        };
+      }
+
+      if (Date.now() > timeout) {
+        throw new MutexException(
+          'Failed to acquire full lock within the timeout period',
+          MUTEX_CODE.LOCK_TIMEOUT
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  /**
+   * 释放全局锁
+   */
+  public async releaseFullLock() {
+    await this.#_redis.del(this.#_fullLock).catch(() => {
+      throw new MutexException(
+        'Failed to release full lock',
+        MUTEX_CODE.UNLOCK_FAILED
+      );
+    });
   }
 
   /**
@@ -116,17 +195,41 @@ export class RedisDBAdapter implements IDBAdapter {
    * @param acquireTimeout 获取锁的超时时间（毫秒）
    */
   public async autoLock<T>(
-    id: string,
+    id: string | string[],
     callback: () => Promise<T>,
     lockTimeout: number = 5000,
     acquireTimeout: number = 1500
   ) {
-    const release = await this.acquireLock(id, lockTimeout, acquireTimeout);
+    if (await this.checkFullLock()) {
+      throw new MutexException(
+        'The full lock is already locked',
+        MUTEX_CODE.SYSTEM_MUTEX
+      );
+    }
 
-    try {
-      return await callback();
-    } finally {
-      await release();
+    // 如果是数组，就需要按照顺序依次获取锁
+    if (Array.isArray(id)) {
+      const releases: Array<() => Promise<void>> = [];
+
+      // 依次获取锁
+      for (const i of id) {
+        const release = await this.acquireLock(i, lockTimeout, acquireTimeout);
+        releases.push(release);
+      }
+
+      try {
+        return await callback();
+      } finally {
+        await Promise.all(releases.map((r) => r()));
+      }
+    } else {
+      // 否则直接获取锁
+      const release = await this.acquireLock(id, lockTimeout, acquireTimeout);
+      try {
+        return await callback();
+      } finally {
+        await release();
+      }
     }
   }
 
@@ -318,6 +421,21 @@ export class RedisDBAdapter implements IDBAdapter {
         throw new DbStorageException(err);
       }
     });
+  }
+
+  /**
+   * 删除所有用户信息
+   */
+  async deleteFull(): Promise<void> {
+    const lock = await this.acquireFullLock();
+    try {
+      const keys = await this.#_redis.keys(`${this._prefix}:*`);
+      if (keys.length) {
+        await this.#_redis.del(...keys);
+      }
+    } finally {
+      await lock();
+    }
   }
 
   /**
