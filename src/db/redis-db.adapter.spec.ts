@@ -56,9 +56,9 @@ describe('RedisDBAdapter', () => {
 
       // Try acquiring the lock, should throw a timeout error
       await expect(
-        db.acquireLock(id, lockTimeout, acquireTimeout),
+        db.acquireLock(id, lockTimeout, acquireTimeout)
       ).rejects.toThrowError(
-        'Failed to acquire lock within the timeout period',
+        'Failed to acquire lock within the timeout period'
       );
     });
 
@@ -76,7 +76,7 @@ describe('RedisDBAdapter', () => {
         const releaseLock = await db.acquireLock(
           id,
           lockTimeout,
-          acquireTimeout,
+          acquireTimeout
         );
         await new Promise((resolve) => setTimeout(resolve, 500)); // Delay by 1 second
         await releaseLock();
@@ -86,7 +86,7 @@ describe('RedisDBAdapter', () => {
         const releaseLock = await db.acquireLock(
           id,
           lockTimeout,
-          acquireTimeout,
+          acquireTimeout
         );
         await new Promise((resolve) => setTimeout(resolve, 500)); // Delay by 1 second
         await releaseLock();
@@ -96,7 +96,7 @@ describe('RedisDBAdapter', () => {
         const releaseLock = await db.acquireLock(
           id,
           lockTimeout,
-          acquireTimeout,
+          acquireTimeout
         );
         await new Promise((resolve) => setTimeout(resolve, 500)); // Delay by 1 second
         await releaseLock();
@@ -144,7 +144,7 @@ describe('RedisDBAdapter', () => {
     it('should fail to acquire lock when a full lock is present', async () => {
       await db.acquireFullLock();
       await expect(() => db.acquireFullLock()).rejects.toThrowError(
-        'Failed to acquire full lock within the timeout period',
+        'Failed to acquire full lock within the timeout period'
       );
     });
 
@@ -156,7 +156,7 @@ describe('RedisDBAdapter', () => {
         await r();
       };
       await expect(() =>
-        db.autoLock<void>('user123', func),
+        db.autoLock<void>('user123', func)
       ).rejects.toThrowError('The full lock is already locked');
     });
   });
@@ -205,7 +205,7 @@ describe('RedisDBAdapter', () => {
 
       // Try acquiring the lock, should throw a timeout error
       await expect(db.acquireFullLock()).rejects.toThrowError(
-        'Failed to acquire full lock within the timeout period',
+        'Failed to acquire full lock within the timeout period'
       );
     });
 
@@ -258,10 +258,10 @@ describe('RedisDBAdapter', () => {
         'user1',
         'user',
         'token123',
-        Date.now() - 10000,
+        Date.now() - 10000
       );
       await expect(db.save(invalidUser)).rejects.toThrowError(
-        'The expire time does not less than now',
+        'The expire time does not less than now'
       );
     });
 
@@ -271,7 +271,7 @@ describe('RedisDBAdapter', () => {
         'user2',
         'type2',
         'token456',
-        Date.now() + 24 * 60 * 60 * 1000,
+        Date.now() + 24 * 60 * 60 * 1000
       );
       user.ctx = { key: 'value' };
       await db.save(user);
@@ -328,27 +328,31 @@ describe('RedisDBAdapter', () => {
 
       // Assert that the expiration time is set
       await expect(redis.pttl(`NAUTH:user1`)).resolves.toBeGreaterThan(-1);
-      await expect(redis.pttl(`NAUTH:${user.type.toUpperCase()}_LOGIN:LOGIN:token123`)).resolves.toBeGreaterThan(
-        -1,
-      );
+      await expect(
+        redis.pttl(`NAUTH:${user.type.toUpperCase()}_LOGIN:LOGIN:token123`)
+      ).resolves.toBeGreaterThan(-1);
 
       const updatedUserData = { id: 'user1', permanent: true };
       await db.update(updatedUserData);
 
       // Assert that the `persist` command was called (you can mock or spy on Redis commands)
       await expect(redis.exists(`NAUTH:user1`)).resolves.toBe(1);
-      await expect(redis.exists(`NAUTH:${user.type.toUpperCase()}_LOGIN:LOGIN:token123`)).resolves.toBe(1);
+      await expect(
+        redis.exists(`NAUTH:${user.type.toUpperCase()}_LOGIN:LOGIN:token123`)
+      ).resolves.toBe(1);
 
       // Assert that the expiration time is removed
       await expect(redis.pttl(`NAUTH:user1`)).resolves.toBe(-1);
-      await expect(redis.pttl(`NAUTH:${user.type.toUpperCase()}_LOGIN:LOGIN:token123`)).resolves.toBe(-1);
+      await expect(
+        redis.pttl(`NAUTH:${user.type.toUpperCase()}_LOGIN:LOGIN:token123`)
+      ).resolves.toBe(-1);
     });
 
     // 测试更新用户数据时用户不存在抛出错误
     it('should throw an error if user does not exist during update', async () => {
       const updatedUserData = { id: 'nonexistent-user', type: 'new-type' };
       await expect(db.update(updatedUserData)).rejects.toThrowError(
-        'The user does not exist',
+        'The user does not exist'
       );
     });
 
@@ -382,7 +386,7 @@ describe('RedisDBAdapter', () => {
     // 测试删除不存在的用户数据抛出错误
     it('should throw error if user does not exist when deleting', async () => {
       await expect(db.delete('nonexistent-user')).rejects.toThrowError(
-        'The redis delete operation failed, the user does not exist or network error',
+        'The redis delete operation failed, the user does not exist or network error'
       );
     });
   });

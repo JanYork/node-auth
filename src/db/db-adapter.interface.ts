@@ -55,7 +55,7 @@ export interface IDBAdapter {
    * @param token 用户Token
    * @param type 用户类型
    */
-  key(token: string,type:string): Promise<string | null>;
+  key(token: string, type: string): Promise<string | null>;
 
   /**
    * 获取认证信息的单个属性值

@@ -323,12 +323,12 @@ export class VerifierLogic {
    */
   public async checkLogin(id: string | number | bigint) {
     const hasKey = await this.db!.exists(
-      `${this.TYPE.toUpperCase()}_LOGIN:${id}`,
+      `${this.TYPE.toUpperCase()}_LOGIN:${id}`
     );
     if (!hasKey) {
       throw new NotLoginException(
         'The user is not logged in',
-        AUTH_CODE.NOT_LOGIN,
+        AUTH_CODE.NOT_LOGIN
       );
     }
 
@@ -336,14 +336,14 @@ export class VerifierLogic {
     if (user === null) {
       throw new NotLoginException(
         'The user is not logged in',
-        AUTH_CODE.NOT_LOGIN,
+        AUTH_CODE.NOT_LOGIN
       );
     }
 
     // 已被踢出
     if (user.kicked) {
       const user = await this.db!.find(
-        `${this.TYPE.toUpperCase()}_LOGIN:${id}`,
+        `${this.TYPE.toUpperCase()}_LOGIN:${id}`
       );
 
       await this.cleanLogin(id);
@@ -355,7 +355,7 @@ export class VerifierLogic {
 
       throw new NotLoginException(
         'The user is kicked out',
-        AUTH_CODE.KICKED_OUT,
+        AUTH_CODE.KICKED_OUT
       );
     }
 
@@ -370,7 +370,7 @@ export class VerifierLogic {
 
       throw new NotLoginException(
         'The user is expired',
-        AUTH_CODE.LOGIN_EXPIRED,
+        AUTH_CODE.LOGIN_EXPIRED
       );
     }
 
@@ -399,7 +399,7 @@ export class VerifierLogic {
    */
   public async cleanLogin(id: string | number | bigint) {
     const isLogin = await this.db!.exists(
-      `${this.TYPE.toUpperCase()}_LOGIN:${id}`,
+      `${this.TYPE.toUpperCase()}_LOGIN:${id}`
     );
     if (isLogin) {
       await this.db!.delete(`${this.TYPE.toUpperCase()}_LOGIN:${id}`);
@@ -448,7 +448,7 @@ export class VerifierLogic {
       if (user!.duration === -1) {
         throw new NotLoginException(
           'The user is permanently disabled',
-          AUTH_CODE.BANNED,
+          AUTH_CODE.BANNED
         );
       }
 
@@ -462,7 +462,7 @@ export class VerifierLogic {
       // 封禁时间未过
       throw new NotLoginException(
         'The user is disabled now',
-        AUTH_CODE.SHORT_BAN,
+        AUTH_CODE.SHORT_BAN
       );
     }
   }
@@ -473,11 +473,11 @@ export class VerifierLogic {
    * @param id 用户唯一标识(string | number | bigint)
    */
   public async tokenValue(
-    id: string | number | bigint,
+    id: string | number | bigint
   ): Promise<string | undefined | null> {
     return await this.db!.field(
       `${this.TYPE.toUpperCase()}_LOGIN:${id}`,
-      'token',
+      'token'
     );
   }
 
@@ -503,7 +503,7 @@ export class VerifierLogic {
   public async timeout(id: string | number | bigint): Promise<number | null> {
     const value = await this.db!.field(
       `${this.TYPE.toUpperCase()}_LOGIN:${id}`,
-      'expireTime',
+      'expireTime'
     );
     if (isEmpty(value)) {
       return null;
@@ -541,7 +541,7 @@ export class VerifierLogic {
    * @param id 用户唯一标识(string | number | bigint)
    */
   public async ctx<T = Record<string, string>>(
-    id: string | number | bigint,
+    id: string | number | bigint
   ): Promise<T> {
     return (await this.db!.ctx(`${this.TYPE.toUpperCase()}_LOGIN:${id}`)) as T;
   }
