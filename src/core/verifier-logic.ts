@@ -126,7 +126,7 @@ export class VerifierLogic {
    *
    * @return {Subject<Event>} 事件主题
    */
-  public get subject() {
+  public get subject(): Subject<Event> {
     return this.#_subject;
   }
 

@@ -38,6 +38,13 @@ export class Verifier {
   }
 
   /**
+   * 获取事件主题
+   */
+  static get subject() {
+    return this.logic.subject;
+  }
+
+  /**
    * 初始化逻辑核心
    */
   static init() {
@@ -109,6 +116,13 @@ export class Verifier {
    */
   static async removeLongTermValid(id: string | number | bigint) {
     await this.logic.nonPermanent(id);
+  }
+
+  /**
+   * 下线所有用户
+   */
+  static async offlineFull() {
+    await this.logic.offlineFull();
   }
 
   /**
