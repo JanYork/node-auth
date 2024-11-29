@@ -52,7 +52,7 @@ export class RedisDBAdapter implements IDBAdapter {
   public async acquireLock(
     id: string,
     lockTimeout: number = 5000,
-    acquireTimeout: number = 1500
+    acquireTimeout: number = 1500,
   ) {
     // 用户的等待队列
     const queueKey = `${this._prefix}:${id}:fair`;
@@ -78,7 +78,7 @@ export class RedisDBAdapter implements IDBAdapter {
           lockValue,
           'PX',
           lockTimeout,
-          'NX'
+          'NX',
         );
 
         if (result === 'OK') {
@@ -93,7 +93,7 @@ export class RedisDBAdapter implements IDBAdapter {
       if (Date.now() > timeout) {
         throw new MutexException(
           'Failed to acquire lock within the timeout period',
-          MUTEX_CODE.LOCK_TIMEOUT
+          MUTEX_CODE.LOCK_TIMEOUT,
         );
       }
 
@@ -121,7 +121,7 @@ export class RedisDBAdapter implements IDBAdapter {
     if (result === null) {
       throw new MutexException(
         'The redis transaction was aborted',
-        MUTEX_CODE.UNLOCK_FAILED
+        MUTEX_CODE.UNLOCK_FAILED,
       );
     }
 
@@ -143,7 +143,7 @@ export class RedisDBAdapter implements IDBAdapter {
    */
   public async acquireFullLock(
     lockTimeout: number = 5000,
-    acquireTimeout: number = 1500
+    acquireTimeout: number = 1500,
   ) {
     const lockValue = uuid();
     const timeout = Date.now() + acquireTimeout;
@@ -154,7 +154,7 @@ export class RedisDBAdapter implements IDBAdapter {
         lockValue,
         'PX',
         lockTimeout,
-        'NX'
+        'NX',
       );
 
       if (result === 'OK') {
@@ -166,7 +166,7 @@ export class RedisDBAdapter implements IDBAdapter {
       if (Date.now() > timeout) {
         throw new MutexException(
           'Failed to acquire full lock within the timeout period',
-          MUTEX_CODE.LOCK_TIMEOUT
+          MUTEX_CODE.LOCK_TIMEOUT,
         );
       }
 
@@ -181,7 +181,7 @@ export class RedisDBAdapter implements IDBAdapter {
     await this.#_redis.del(this.#_fullLock).catch(() => {
       throw new MutexException(
         'Failed to release full lock',
-        MUTEX_CODE.UNLOCK_FAILED
+        MUTEX_CODE.UNLOCK_FAILED,
       );
     });
   }
@@ -198,12 +198,12 @@ export class RedisDBAdapter implements IDBAdapter {
     id: string | string[],
     callback: () => Promise<T>,
     lockTimeout: number = 5000,
-    acquireTimeout: number = 1500
+    acquireTimeout: number = 1500,
   ) {
     if (await this.checkFullLock()) {
       throw new MutexException(
         'The full lock is already locked',
-        MUTEX_CODE.SYSTEM_MUTEX
+        MUTEX_CODE.SYSTEM_MUTEX,
       );
     }
 
@@ -268,9 +268,9 @@ export class RedisDBAdapter implements IDBAdapter {
       }
 
       // 建立双向索引链，token -> user_id, user_id -> token
-      multi.set(`${this._prefix}:LOGIN:${user.token}`, id);
+      multi.set(`${this._prefix}:${user.type.toUpperCase()}_LOGIN:LOGIN:${user.token}`, id);
       if (keyExpire !== null) {
-        multi.pexpire(`${this._prefix}:LOGIN:${user.token}`, keyExpire);
+        multi.pexpire(`${this._prefix}:${user.type.toUpperCase()}_LOGIN:LOGIN:${user.token}`, keyExpire);
       }
 
       const result = await multi.exec();
@@ -309,7 +309,7 @@ export class RedisDBAdapter implements IDBAdapter {
       const id = user.id;
       user.updateTime = Date.now();
       const values = Object.entries(user).filter(
-        ([key]) => key !== 'id' && key !== 'ctx'
+        ([key]) => key !== 'id' && key !== 'ctx',
       );
       const dbUser = await this.find(id);
       if (!dbUser) {
@@ -324,7 +324,7 @@ export class RedisDBAdapter implements IDBAdapter {
         if (user.permanent === true) {
           multi.persist(`${this._prefix}:${id}`);
           // token key
-          const tkKey = `${this._prefix}:LOGIN:${dbUser!.token}`;
+          const tkKey = `${this._prefix}:${dbUser.type.toUpperCase()}_LOGIN:LOGIN:${dbUser!.token}`;
           multi.persist(tkKey);
 
           // ctx key
@@ -342,7 +342,7 @@ export class RedisDBAdapter implements IDBAdapter {
           multi.pexpire(`${this._prefix}:${id}`, keyExpire);
 
           // token key
-          const tkKey = `${this._prefix}:LOGIN:${dbUser!.token}`;
+          const tkKey = `${this._prefix}:${dbUser.type.toUpperCase()}_LOGIN:LOGIN:${dbUser!.token}`;
           multi.pexpire(tkKey, keyExpire);
 
           // ctx key
@@ -363,7 +363,7 @@ export class RedisDBAdapter implements IDBAdapter {
         multi.pexpire(`${this._prefix}:${id}`, keyExpire);
 
         // token key
-        const tkKey = `${this._prefix}:LOGIN:${dbUser!.token}`;
+        const tkKey = `${this._prefix}:${dbUser.type.toUpperCase()}_LOGIN:LOGIN:${dbUser!.token}`;
         multi.pexpire(tkKey, keyExpire);
 
         // ctx key
@@ -399,14 +399,20 @@ export class RedisDBAdapter implements IDBAdapter {
     await this.autoLock(id, async () => {
       if (!(await this.exists(id))) {
         throw new DbStorageException(
-          'The redis delete operation failed, the user does not exist or network error'
+          'The redis delete operation failed, the user does not exist or network error',
         );
       }
-      const token = await this.#_redis.hget(`${this._prefix}:${id}`, 'token');
+      const token = await this.field(id, 'token');
+      const type = await this.field(id, 'type');
+
+      if (!token || !type) {
+        throw new DbStorageException('The redis delete operation failed due to missing token or type');
+      }
+
       const multi = this.#_redis.multi();
       multi.del(`${this._prefix}:${id}`);
       // 删除双向索引链
-      multi.del(`${this._prefix}:LOGIN:${token}`);
+      multi.del(`${this._prefix}:${type.toUpperCase()}_LOGIN:LOGIN:${token}`);
       // 如果有上下文，删除上下文，否则不删除
       multi.del(`${this._prefix}:${id}:CTX`);
 
@@ -456,7 +462,7 @@ export class RedisDBAdapter implements IDBAdapter {
    */
   async field<T extends Exclude<keyof UserDO, 'ctx'>>(
     id: string,
-    field: T
+    field: T,
   ): Promise<UserDO[T] | null> {
     const result = await this.#_redis.hget(`${this._prefix}:${id}`, field);
     return result as UserDO[T] | null;
@@ -552,10 +558,11 @@ export class RedisDBAdapter implements IDBAdapter {
   /**
    * 通过Token获取用户Key
    *
-   * @param token
+   * @param token 用户Token
+   * @param type 用户类型
    */
-  async key(token: string): Promise<string | null> {
-    const key = `${this._prefix}:LOGIN:${token}`;
+  async key(token: string, type: string): Promise<string | null> {
+    const key = `${this._prefix}:${type.toUpperCase()}_LOGIN:LOGIN:${token}`;
     const result = await this.#_redis.get(key);
     return result ? `${this._prefix}:${result}` : null;
   }

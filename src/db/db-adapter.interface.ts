@@ -53,8 +53,9 @@ export interface IDBAdapter {
    * 反向索引，使用Token获取用户信息Key
    *
    * @param token 用户Token
+   * @param type 用户类型
    */
-  key(token: string): Promise<string | null>;
+  key(token: string,type:string): Promise<string | null>;
 
   /**
    * 获取认证信息的单个属性值
