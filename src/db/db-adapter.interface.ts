@@ -40,7 +40,7 @@ export interface IDBAdapter {
   /**
    * 删除所有认证信息
    */
-  deleteFull(): Promise<void>;
+  deleteFull(key: string): Promise<void>;
 
   /**
    * 是否存在用户的认证信息

@@ -384,7 +384,7 @@ export class VerifierLogic {
    * 下线所有
    */
   public async offlineFull() {
-    await this.db.deleteFull();
+    await this.db.deleteFull(`${this.TYPE.toUpperCase()}_LOGIN`);
 
     this.#_subject.next({
       type: EVENT_TYPE.OFFLINE_ALL,

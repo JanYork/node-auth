@@ -426,10 +426,10 @@ export class RedisDBAdapter implements IDBAdapter {
   /**
    * 删除所有用户信息
    */
-  async deleteFull(): Promise<void> {
+  async deleteFull(key: string): Promise<void> {
     const lock = await this.acquireFullLock();
     try {
-      const keys = await this.#_redis.keys(`${this._prefix}:*`);
+      const keys = await this.#_redis.keys(`${this._prefix}:${key}*`);
       if (keys.length) {
         await this.#_redis.del(...keys);
       }

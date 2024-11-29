@@ -1,4 +1,5 @@
-import { VerifierLogic } from './verifier-logic';
+import { VerifierLogic, Event } from './verifier-logic';
+import { Subject } from 'rxjs';
 
 /**
  * 权限校验器
@@ -40,7 +41,7 @@ export class Verifier {
   /**
    * 获取事件主题
    */
-  static get subject() {
+  static get subject(): Subject<Event> {
     return this.logic.subject;
   }
 
