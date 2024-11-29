@@ -107,5 +107,5 @@ export interface IDBAdapter {
    * @param id 用户唯一标识
    * @param key 键
    */
-  get(id: string, key: string): Promise<UserDO | null>;
+  get(id: string, key: string): Promise<string | null>;
 }

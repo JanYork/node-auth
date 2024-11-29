@@ -545,9 +545,8 @@ export class RedisDBAdapter implements IDBAdapter {
    * @param id 用户唯一标识
    * @param key 键
    */
-  async get(id: string, key: string): Promise<UserDO | null> {
-    const result = await this.#_redis.hget(`${this._prefix}:${id}:CTX`, key);
-    return result as UserDO | null;
+  async get(id: string, key: string): Promise<string | null> {
+    return this.#_redis.hget(`${this._prefix}:${id}:CTX`, key);
   }
 
   /**
