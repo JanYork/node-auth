@@ -1,4 +1,5 @@
-import { VerifierLogic } from './verifier-logic';
+import { VerifierLogic, Event } from './verifier-logic';
+import { Subject } from 'rxjs';
 
 /**
  * 权限校验器
@@ -35,6 +36,13 @@ export class Verifier {
    */
   static set logic(logic: VerifierLogic) {
     Verifier._logic = logic;
+  }
+
+  /**
+   * 获取事件主题
+   */
+  static get subject(): Subject<Event> {
+    return this.logic.subject;
   }
 
   /**
@@ -109,6 +117,13 @@ export class Verifier {
    */
   static async removeLongTermValid(id: string | number | bigint) {
     await this.logic.nonPermanent(id);
+  }
+
+  /**
+   * 下线所有用户
+   */
+  static async offlineFull() {
+    await this.logic.offlineFull();
   }
 
   /**

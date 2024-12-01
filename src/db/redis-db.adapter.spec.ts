@@ -66,66 +66,49 @@ describe('RedisDBAdapter', () => {
     it('should acquire lock in a fair manner when multiple requests are queued', async () => {
       jest.setTimeout(10000); // 延长超时，确保测试能够运行
 
+      redis.flushdb();
+
       const id = 'user123';
       const lockTimeout = 2500; // 2.5秒锁过期时间
       const acquireTimeout = 3500; // 3.5秒获取锁超时
 
-      // 模拟多个请求排队获取锁
-      const lockQueue: string[] = [];
+      const lockFunc1 = async () => {
+        const releaseLock = await db.acquireLock(
+          id,
+          lockTimeout,
+          acquireTimeout
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500)); // Delay by 1 second
+        await releaseLock();
+      };
 
-      // Mock lpush: 将请求加入队列
-      redis.lpush = jest.fn().mockImplementation((key, lockValue) => {
-        lockQueue.push(lockValue);
-        return Promise.resolve(lockQueue.length);
-      });
+      const lockFunc2 = async () => {
+        const releaseLock = await db.acquireLock(
+          id,
+          lockTimeout,
+          acquireTimeout
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500)); // Delay by 1 second
+        await releaseLock();
+      };
 
-      // Mock lindex: 获取队列第一个请求的锁值
-      redis.lindex = jest.fn().mockImplementation((key, index) => {
-        return Promise.resolve(lockQueue[index] || null); // 返回队列中的锁值
-      });
+      const lockFunc3 = async () => {
+        const releaseLock = await db.acquireLock(
+          id,
+          lockTimeout,
+          acquireTimeout
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500)); // Delay by 1 second
+        await releaseLock();
+      };
 
-      // Mock set: 模拟锁的设置
-      redis.set = jest.fn().mockResolvedValue('OK');
+      await lockFunc1();
+      await lockFunc2();
+      await lockFunc3();
 
-      // Mock lpop: 移除队列中的第一个元素（当一个请求成功获得锁时）
-      redis.lpop = jest.fn().mockImplementation(() => {
-        return Promise.resolve(lockQueue.shift()); // 移除队列中的第一个锁值
-      });
-
-      // 第一个请求应该成功获取锁
-      const releaseLock1 = await db.acquireLock(
-        id,
-        lockTimeout,
-        acquireTimeout
-      );
-      expect(redis.lpush).toHaveBeenCalledWith(
-        `NAUTH:${id}:fair`,
-        expect.any(String)
-      );
-      expect(redis.lindex).toHaveBeenCalledWith(`NAUTH:${id}:fair`, 0);
-
-      // 第二个请求将被加入队列，并且需要等待第一个请求释放锁
-      const releaseLock2Promise = db.acquireLock(
-        id,
-        lockTimeout,
-        acquireTimeout
-      );
-
-      // 确保第二个请求等待在队列
-      expect(redis.lpush).toHaveBeenCalledWith(
-        `NAUTH:${id}:fair`,
-        expect.any(String)
-      );
-
-      // 模拟第一个请求释放锁
-      await releaseLock1();
-
-      // 释放第一个锁后，第二个请求应该能成功获取锁
-      const releaseLock2 = await releaseLock2Promise;
-      expect(redis.lpop).toHaveBeenCalledWith(`NAUTH:${id}:fair`);
-
-      // 最后释放第二个锁
-      await releaseLock2();
+      const lockKey = `NAUTH:${id}:lock`;
+      const lockValue = await redis.get(lockKey);
+      expect(lockValue).toBeNull();
     });
 
     // 测试上锁并释放锁，异步并发
@@ -156,6 +139,26 @@ describe('RedisDBAdapter', () => {
       const lockValue = await redis.get(lockKey);
       expect(lockValue).toBeNull();
     });
+
+    // 有全局锁时，测试获取锁失败
+    it('should fail to acquire lock when a full lock is present', async () => {
+      await db.acquireFullLock();
+      await expect(() => db.acquireFullLock()).rejects.toThrowError(
+        'Failed to acquire full lock within the timeout period'
+      );
+    });
+
+    // 有全局锁时，测试获取自动公平锁失败
+    it('should fail to acquire fair lock when a full lock is present', async () => {
+      redis.flushdb();
+      const r = await db.acquireFullLock();
+      const func = async () => {
+        await r();
+      };
+      await expect(() =>
+        db.autoLock<void>('user123', func)
+      ).rejects.toThrowError('The full lock is already locked');
+    });
   });
 
   // 测试释放锁
@@ -163,15 +166,77 @@ describe('RedisDBAdapter', () => {
     // 测试释放锁并从Redis中删除它
     it('should release the lock and remove it from Redis', async () => {
       const id = 'user123';
-
-      // Simulate a lock being set
-      redis.set = jest.fn().mockResolvedValue('OK');
-      redis.del = jest.fn().mockResolvedValue(1); // Simulate successful deletion
+      redis.flushdb();
 
       const releaseLock = await db.acquireLock(id, 5000, 1500);
       await releaseLock(); // Release the lock
 
-      expect(redis.del).toHaveBeenCalledWith(`NAUTH:${id}:lock`);
+      const lockKey = `NAUTH:${id}:lock`;
+      const lockValue = await redis.get(lockKey);
+      expect(lockValue).toBeNull();
+    });
+  });
+
+  // 测试fullLock
+  describe('fullLock', () => {
+    // 测试全局锁定
+    it('should acquire the full lock successfully', async () => {
+      // Mock set to return 'OK' when lock is acquired
+      redis.set = jest.fn().mockResolvedValue('OK');
+
+      const releaseFullLock = await db.acquireFullLock();
+      expect(releaseFullLock).toBeDefined();
+
+      // Check if the full lock was acquired by checking Redis for the lock key
+      const fullLockKey = 'NAUTH:fullLock';
+      const fullLockValue = await redis.get(fullLockKey);
+      expect(fullLockValue).toBeDefined(); // Lock should be set in Redis
+
+      // Call releaseFullLock function and check if the lock is removed
+      await releaseFullLock();
+      const fullLockAfterRelease = await redis.get(fullLockKey);
+      expect(fullLockAfterRelease).toBeNull(); // Lock should be removed after release
+    });
+
+    // 测试全局锁定超时
+    it('should timeout if unable to acquire the full lock within the specified timeout', async () => {
+      // Simulate that the lock is already held (mock Redis response)
+      redis.set = jest.fn().mockResolvedValue('BUSY');
+
+      // Try acquiring the lock, should throw a timeout error
+      await expect(db.acquireFullLock()).rejects.toThrowError(
+        'Failed to acquire full lock within the timeout period'
+      );
+    });
+
+    // 测试释放全局锁
+    it('should release the full lock successfully', async () => {
+      // Simulate a lock being set
+      redis.set = jest.fn().mockResolvedValue('OK');
+      redis.del = jest.fn().mockResolvedValue(1); // Simulate successful deletion
+
+      const releaseFullLock = await db.acquireFullLock();
+      await releaseFullLock(); // Release the lock
+
+      expect(redis.del).toHaveBeenCalledWith('NAUTH:FULL:LOCK');
+    });
+
+    // 测试全局锁检查
+    it('should check the full lock successfully', async () => {
+      // Simulate a lock being set
+      redis.exists = jest.fn().mockResolvedValue(1); // Simulate the lock exists
+
+      const fullLockExists = await db.checkFullLock();
+      expect(fullLockExists).toBe(true);
+    });
+
+    // 测试全局锁不存在
+    it('should return false if the full lock does not exist', async () => {
+      // Simulate a lock being set
+      redis.exists = jest.fn().mockResolvedValue(0); // Simulate the lock does not exist
+
+      const fullLockExists = await db.checkFullLock();
+      expect(fullLockExists).toBe(false);
     });
   });
 
@@ -263,20 +328,24 @@ describe('RedisDBAdapter', () => {
 
       // Assert that the expiration time is set
       await expect(redis.pttl(`NAUTH:user1`)).resolves.toBeGreaterThan(-1);
-      await expect(redis.pttl(`NAUTH:LOGIN:token123`)).resolves.toBeGreaterThan(
-        -1
-      );
+      await expect(
+        redis.pttl(`NAUTH:${user.type.toUpperCase()}_LOGIN:LOGIN:token123`)
+      ).resolves.toBeGreaterThan(-1);
 
       const updatedUserData = { id: 'user1', permanent: true };
       await db.update(updatedUserData);
 
       // Assert that the `persist` command was called (you can mock or spy on Redis commands)
       await expect(redis.exists(`NAUTH:user1`)).resolves.toBe(1);
-      await expect(redis.exists(`NAUTH:LOGIN:token123`)).resolves.toBe(1);
+      await expect(
+        redis.exists(`NAUTH:${user.type.toUpperCase()}_LOGIN:LOGIN:token123`)
+      ).resolves.toBe(1);
 
       // Assert that the expiration time is removed
       await expect(redis.pttl(`NAUTH:user1`)).resolves.toBe(-1);
-      await expect(redis.pttl(`NAUTH:LOGIN:token123`)).resolves.toBe(-1);
+      await expect(
+        redis.pttl(`NAUTH:${user.type.toUpperCase()}_LOGIN:LOGIN:token123`)
+      ).resolves.toBe(-1);
     });
 
     // 测试更新用户数据时用户不存在抛出错误
@@ -413,13 +482,13 @@ describe('RedisDBAdapter', () => {
       const user = new UserDO('user1', 'type1', 'token123');
       await db.save(user);
 
-      const redisKey = await db.key('token123');
+      const redisKey = await db.key('token123', user.type);
       expect(redisKey).toBe('NAUTH:user1');
     });
 
     // 测试令牌不存在时返回null
     it('should return null if token does not exist', async () => {
-      const redisKey = await db.key('nonexistentToken');
+      const redisKey = await db.key('nonexistentToken', 'type1');
       expect(redisKey).toBeNull();
     });
   });

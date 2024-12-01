@@ -38,6 +38,11 @@ export interface IDBAdapter {
   delete(id: string): Promise<void>;
 
   /**
+   * 删除所有认证信息
+   */
+  deleteFull(key: string): Promise<void>;
+
+  /**
    * 是否存在用户的认证信息
    *
    * @param id 用户唯一标识
@@ -48,8 +53,9 @@ export interface IDBAdapter {
    * 反向索引，使用Token获取用户信息Key
    *
    * @param token 用户Token
+   * @param type 用户类型
    */
-  key(token: string): Promise<string | null>;
+  key(token: string, type: string): Promise<string | null>;
 
   /**
    * 获取认证信息的单个属性值
@@ -102,5 +108,5 @@ export interface IDBAdapter {
    * @param id 用户唯一标识
    * @param key 键
    */
-  get(id: string, key: string): Promise<UserDO | null>;
+  get(id: string, key: string): Promise<string | null>;
 }
